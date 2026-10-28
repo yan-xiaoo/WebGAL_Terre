@@ -1,0 +1,52 @@
+name: Validate macOS symlink packaging
+on:
+  push:
+    branches:
+      - codex/macos-symlink-validation
+permissions:
+  contents: read
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            script: release-mac.sh
+            bundle: mac-universal
+            archive: WebGAL_Terre_Mac
+          - runner: macos-15-intel
+            script: release-mac-x64.sh
+            bundle: mac
+            archive: WebGAL_Terre_Mac_Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - name: Build full release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh ${{ matrix.script }}
+      - name: Run file service regression tests
+        run: yarn workspace webgal-terre-2 test --runInBand webgal-fs.service.spec.ts
+      - name: Archive using the checked-in build workflow command
+        env:
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          ruby -ryaml -e 'config = YAML.load_file(".github/workflows/build-terre.yml"); job = ENV.fetch("ARCHIVE").end_with?("Intel") ? "build-mac-x64" : "build-mac"; puts config.fetch("jobs").fetch(job).fetch("steps").find { |s| s["name"] == "Compress" }.fetch("run")' > "$RUNNER_TEMP/compress.sh"
+          bash -e "$RUNNER_TEMP/compress.sh"
+      - name: Extract published archive
+        run: ditto -x -k release/${{ matrix.archive }}.zip "$RUNNER_TEMP/extracted"
+      - name: Check all template links and exported app portability
+        env:
+          BUNDLE: ${{ matrix.bundle }}
+        run: node .github/scripts/validate-macos-symlinks.cjs
+      - name: Smoke test the relocated Electron executable
+        run: ELECTRON_RUN_AS_NODE=1 "$RUNNER_TEMP/portable/WebGAL.app/Contents/MacOS/WebGAL" -p 'process.arch'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: release/${{ matrix.archive }}.zip

@@ -114,7 +114,11 @@ export class WebgalFsService {
   async copy(src: string, dest: string): Promise<boolean> {
     try {
       this.logger.log(`复制: ${decodeURI(src)} -> ${decodeURI(dest)}`);
-      await fs.cp(decodeURI(src), decodeURI(dest), { recursive: true });
+      await fs.cp(decodeURI(src), decodeURI(dest), {
+        recursive: true,
+        // 保留相对链接，使导出的 macOS Framework 不依赖原模板目录。
+        verbatimSymlinks: true,
+      });
       return true;
     } catch (error) {
       this.logger.error(
