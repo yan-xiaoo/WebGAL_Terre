@@ -5,6 +5,9 @@ import { gunzipSync } from 'zlib';
 import AdmZip = require('adm-zip');
 import { WebgalFsService } from './webgal-fs.service';
 
+// 文件复制测试无需加载 ESM 格式的系统回收站依赖。
+jest.mock('trash', () => ({ default: jest.fn() }));
+
 describe('WebgalFsService', () => {
   const testRoot = join(
     process.cwd(),
